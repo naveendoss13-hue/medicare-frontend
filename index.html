@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>MediCare • Home</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <style>
+    body{background:#f4f7fb}
+    .hero{background:linear-gradient(90deg,#0ea5a6, #2dd4bf); color:#fff; padding:30px; border-radius:12px}
+    .card-ghost{background:linear-gradient(180deg,#fff,#f8fafc); border:0; box-shadow:0 6px 18px rgba(12,15,20,0.06)}
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="index.html"><i class="fa-solid fa-syringe text-teal"></i> MediCare</a>
+    <div>
+      <a class="btn btn-outline-primary me-2" href="login.html">Login</a>
+      <a class="btn btn-primary" href="admin.html">Admin</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container my-4">
+  <div class="hero d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h1 class="h3 mb-1">Smart Injection Reminder</h1>
+      <div>Quickly add patients & schedule injections. Multi-channel reminders (console stub).</div>
+    </div>
+    <div>
+      <img src="https://img.icons8.com/ios-filled/80/ffffff/syringe.png" alt="syringe" style="opacity:.95">
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-5">
+      <div class="card card-ghost p-4">
+        <h5 class="mb-3">Create Patient & Schedule</h5>
+        <form id="createForm" class="needs-validation" novalidate>
+          <div class="mb-2">
+            <input id="name" class="form-control" placeholder="Patient full name" required>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col">
+              <input id="phone" class="form-control" placeholder="Phone">
+            </div>
+            <div class="col">
+              <input id="email" class="form-control" placeholder="Email">
+            </div>
+          </div>
+          <div class="mb-2">
+            <input id="med" class="form-control" placeholder="Medication (e.g., Vaccine A)" required>
+          </div>
+          <div class="mb-3">
+            <input id="time" type="datetime-local" class="form-control" required>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-success" type="submit"><i class="fa-solid fa-plus me-1"></i> Create</button>
+            <button id="btnClear" class="btn btn-outline-secondary" type="button">Clear</button>
+          </div>
+          <div class="form-text mt-2">Times are saved in ISO format and backend scheduler checks every minute.</div>
+        </form>
+      </div>
+    </div>
+
+    <div class="col-lg-7">
+      <div class="card card-ghost p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">Upcoming Doses</h5>
+          <button id="refreshBtn" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+        </div>
+        <div id="doses" class="row gy-3"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:9999">
+  <div id="toast" class="toast align-items-center text-bg-dark border-0" role="alert" aria-live="polite" aria-atomic="true">
+    <div class="d-flex">
+      <div id="toastBody" class="toast-body"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+
+<script>
+const api = "http://localhost:8080/api";
+const toastEl = new bootstrap.Toast(document.getElementById('toast'));
+function showToast(msg){ document.getElementById('toastBody').innerText = msg; toastEl.show(); }
+
+document.getElementById('createForm').onsubmit = async (e) => {
+  e.preventDefault();
+  try{
+    const u = {
+      username: document.getElementById('phone').value || ('u'+Date.now()),
+      fullName: document.getElementById('name').value,
+      role: 'PATIENT',
+      phone: document.getElementById('phone').value,
+      email: document.getElementById('email').value
+    };
+    const r1 = await fetch(api + '/users', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(u)});
+    const user = await r1.json();
+    const payload = {
+      patientId: user.id,
+      medicationName: document.getElementById('med').value,
+      scheduledTime: new Date(document.getElementById('time').value).toISOString()
+    };
+    await fetch(api + '/schedules', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    showToast('Patient & schedule created');
+    loadDoses();
+  }catch(err){ showToast('Error: ' + (err.message||err)); }
+};
+
+document.getElementById('btnClear').onclick = ()=>{ document.getElementById('createForm').reset(); }
+
+document.getElementById('refreshBtn').onclick = loadDoses;
+
+async function loadDoses(){
+  try{
+    const res = await fetch(api + '/doses');
+    const list = await res.json();
+    const container = document.getElementById('doses');
+    if(!list.length) { container.innerHTML = '<div class="text-muted">No doses yet</div>'; return; }
+    container.innerHTML = list.map(d => `
+      <div class="col-md-6">
+        <div class="card p-3">
+          <div class="d-flex justify-content-between">
+            <div><b>${escapeHtml(d.medicationName)}</b><div class="text-muted small">for ${d.patientId}</div></div>
+            <div class="text-end small text-muted">${new Date(d.scheduledTime).toLocaleString()}</div>
+          </div>
+          <div class="mt-2 d-flex justify-content-between align-items-center">
+            <div class="badge ${d.status==='SCHEDULED'?'bg-warning text-dark': d.status==='SENT' ? 'bg-info text-dark' : 'bg-success'}">${d.status}</div>
+            ${d.status==='SCHEDULED' ? `<button class="btn btn-sm btn-success" onclick="mark('${d.id}')">Mark Given</button>` : ''}
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }catch(e){ console.error(e); }
+}
+
+async function mark(id){
+  await fetch(api + '/doses/' + id + '/given', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({givenBy:'nurse1'})});
+  showToast('Marked given');
+  loadDoses();
+}
+
+function escapeHtml(s){ return s ? s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) : ''; }
+
+loadDoses();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

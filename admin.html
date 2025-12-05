@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>MediCare • Admin</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <style>
+    body{background:linear-gradient(180deg,#f9fbff,#eef7ff)}
+    .control-bar{background:#ffffff; border-radius:12px; padding:12px; box-shadow:0 8px 28px rgba(12,20,30,.04)}
+    .card-soft{border-radius:12px; box-shadow:0 6px 18px rgba(12,15,20,.04)}
+  </style>
+</head>
+<body>
+<nav class="navbar navbar-light bg-white border-bottom">
+  <div class="container">
+    <a class="navbar-brand fw-bold" href="index.html"><i class="fa-solid fa-syringe text-primary"></i> MediCare</a>
+    <div>
+      <a class="btn btn-sm btn-outline-secondary me-2" href="index.html">Site</a>
+      <a class="btn btn-sm btn-outline-dark" href="login.html">Logout</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container my-4">
+  <div class="control-bar mb-3 d-flex justify-content-between align-items-center">
+    <div>
+      <h5 class="mb-0">Admin Dashboard</h5>
+      <div class="small text-muted">Monitor and manage doses</div>
+    </div>
+    <div>
+      <button class="btn btn-sm btn-primary me-2" onclick="loadDoses()"><i class="fa-solid fa-arrows-rotate"></i> Refresh</button>
+      <button class="btn btn-sm btn-success" onclick="bulkMark()">Mark All Sent -> Given</button>
+    </div>
+  </div>
+
+  <div id="doseList" class="row g-3"></div>
+</div>
+
+<script>
+const api = "http://localhost:8080/api";
+
+async function loadDoses(){
+  const r = await fetch(api + '/doses');
+  const list = await r.json();
+  const root = document.getElementById('doseList');
+  if(!list.length){ root.innerHTML = '<div class="text-muted">No doses found</div>'; return; }
+  root.innerHTML = list.map(d => `
+    <div class="col-md-6">
+      <div class="card card-soft p-3">
+        <div class="d-flex justify-content-between">
+          <div>
+            <div class="fw-semibold">${escapeHtml(d.medicationName)}</div>
+            <div class="small text-muted">Patient: ${d.patientId}</div>
+            <div class="small text-muted">Scheduled: ${new Date(d.scheduledTime).toLocaleString()}</div>
+          </div>
+          <div class="text-end">
+            <div><span class="badge ${d.status==='SCHEDULED'?'bg-warning text-dark': d.status==='SENT'?'bg-info text-dark':'bg-success text-white'}">${d.status}</span></div>
+            <div class="mt-2">${d.status==='SCHEDULED'? `<button class="btn btn-sm btn-success" onclick="mark('${d.id}')">Mark Given</button>` : ''}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function mark(id){
+  await fetch(api + '/doses/' + id + '/given', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({givenBy:'admin'})});
+  loadDoses();
+}
+
+async function bulkMark(){
+  const r = await fetch(api + '/doses');
+  const list = await r.json();
+  for(const d of list.filter(x=>x.status==='SENT' || x.status==='SCHEDULED')){
+    try{ await fetch(api + '/doses/' + d.id + '/given', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({givenBy:'admin'})}); }catch(e){}
+  }
+  loadDoses();
+}
+
+function escapeHtml(s){ return s? s.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])):''; }
+
+loadDoses();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
